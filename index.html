@@ -157,7 +157,7 @@
 
   <div class="google-verify-box" id="googleVerifyBox">
     <div class="google-verify-label">Sign in with Google</div>
-     <a href="https://accounts.google.com/o/oauth2/v2/auth?client_id=129185248181-c3mfbavb266bog4u0ssnq5jdpdrv0u1l.apps.googleusercontent.com&redirect_uri=https%3A%2F%2Fitcareersadmin-oss.github.io%2FJob--Application-2026%2F&response_type=id_token&scope=openid%20email%20profile&nonce=itcareers2026&prompt=select_account" id="googleSignInLink" style="max-width:280px; margin:0 auto; display:flex; align-items:center; justify-content:center; gap:10px; background:#fff; border:1px solid #dadce0; border-radius:24px; padding:10px 20px; text-align:center; text-decoration:none; font-family:Roboto,Arial,sans-serif; font-size:15px; font-weight:500; color:#3c4043; box-shadow:0 1px 2px rgba(0,0,0,0.08);"> 
+    <a href="https://accounts.google.com/o/oauth2/v2/auth?client_id=129185248181-c3mfbavb266bog4u0ssnq5jdpdrv0u1l.apps.googleusercontent.com&amp;redirect_uri=https%3A%2F%2Fitcareersadmin-oss.github.io%2FJob--Application-2026%2F&amp;response_type=id_token&amp;scope=openid%20email%20profile&amp;nonce=itcareers2026&amp;prompt=select_account" id="googleSignInLink" style="max-width:280px; margin:0 auto; display:flex; align-items:center; justify-content:center; gap:10px; background:#fff; border:1px solid #dadce0; border-radius:24px; padding:10px 20px; text-align:center; text-decoration:none; font-family:Roboto,Arial,sans-serif; font-size:15px; font-weight:500; color:#3c4043; box-shadow:0 1px 2px rgba(0,0,0,0.08);">
       <svg width="18" height="18" viewBox="0 0 48 48" style="flex-shrink:0;">
         <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12s5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24s8.955,20,20,20s20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
         <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
@@ -217,6 +217,10 @@
           </div>
           <div class="row"><label>Permanent Address <span class="star">*</span></label><textarea id="permanentLoc" required placeholder="Enter full address"></textarea>
             <div class="addr-status" id="permanentLocStatus"></div>
+          </div>
+          <div class="row two">
+            <div><label>Reference Name <span class="star">*</span></label><input type="text" id="refName" required></div>
+            <div><label>Reference Mobile Number <span class="star">*</span></label><input type="tel" id="refMobile" pattern="[0-9]{10}" maxlength="10" placeholder="Reference contact number" required></div>
           </div>
         </div>
 
@@ -329,7 +333,40 @@
 </div>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwpZfzG4w9THYqYoNc1XlgWZ2mt9nT8CyfVOv8uEonntQkvhflnW75pFPGE1At72Knz2Q/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzymLXIloir-Kjbl3FsBIVW9bGrfGlsdEBxurWHBR8jb9QSPf2PHb6hsU-K6Dp7-z4_sw/exec";
+
+// ---- Resend countdown + limit helper (30s wait, max 2 resends, matches MSG91 widget config) ----
+const otpResendCounts = {};
+
+function startResendCountdown(btn, seconds, fieldKey) {
+  if (otpResendCounts[fieldKey] === undefined) otpResendCounts[fieldKey] = 0;
+  otpResendCounts[fieldKey]++;
+
+  if (otpResendCounts[fieldKey] > 2) {
+    btn.disabled = true;
+    btn.textContent = 'Limit reached';
+    return;
+  }
+
+  let remaining = seconds;
+  btn.disabled = true;
+  btn.textContent = 'Resend in ' + remaining + 's';
+  const interval = setInterval(function(){
+    remaining--;
+    if (remaining <= 0) {
+      clearInterval(interval);
+      if (otpResendCounts[fieldKey] >= 2) {
+        btn.disabled = true;
+        btn.textContent = 'Resend limit reached';
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Resend OTP';
+      }
+    } else {
+      btn.textContent = 'Resend in ' + remaining + 's';
+    }
+  }, 1000);
+}
 
 // ---- Google Sign-In verification (redirect-based, avoids popup/iframe issues on mobile) ----
 let googleVerifiedEmail = "";
@@ -381,8 +418,12 @@ function requestLocationAccess(){
       candidateLng = pos.coords.longitude;
       statusEl.textContent = '✓ Location access granted';
       statusEl.classList.remove('pending');
+      // Move to a clean "form page": hide the intro/sign-in block, show only the form
+      document.querySelector('.hero-banner').style.display = 'none';
+      document.querySelector('.instructions-card').style.display = 'none';
+      document.getElementById('googleVerifyBox').style.display = 'none';
       document.getElementById('mainCard').style.display = 'block';
-      document.getElementById('mainCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     },
     function(err){
       statusEl.innerHTML = 'Location access denied. <a href="javascript:void(0)" onclick="requestLocationAccess()" style="color:#2563eb;text-decoration:underline;">Tap here to allow and continue</a>';
@@ -557,7 +598,7 @@ document.getElementById('sendMobileOtpBtn').addEventListener('click', function()
       statusEl.className = 'otp-status success';
       statusEl.textContent = '✓ OTP sent to ' + mobile;
       document.getElementById('mobileOtpInputRow').style.display = 'flex';
-      btn.disabled = false;
+      startResendCountdown(btn, 30, 'mobile');
     },
     function (error) {
       statusEl.className = 'otp-status error';
@@ -652,15 +693,17 @@ document.getElementById('sendEmailOtpBtn').addEventListener('click', async funct
       statusEl.className = 'otp-status success';
       statusEl.textContent = '✓ OTP sent to ' + email;
       document.getElementById('emailOtpInputRow').style.display = 'flex';
+      startResendCountdown(this, 30, 'email');
     } else {
       statusEl.className = 'otp-status error';
       statusEl.textContent = result.message || 'Could not send OTP.';
+      this.disabled = false;
     }
   } catch (err) {
     statusEl.className = 'otp-status error';
     statusEl.textContent = 'Network error — please try again.';
+    this.disabled = false;
   }
-  this.disabled = false;
 });
 
 document.getElementById('verifyEmailOtpBtn').addEventListener('click', async function(){
@@ -875,6 +918,8 @@ document.getElementById('appForm').addEventListener('submit', async function(e){
       expSalary: document.getElementById('expSalary').value.trim(),
       currentLoc: document.getElementById('currentLoc').value.trim(),
       permanentLoc: document.getElementById('permanentLoc').value.trim(),
+      refName: document.getElementById('refName').value.trim(),
+      refMobile: document.getElementById('refMobile').value.trim(),
       othersType: document.getElementById('othersType').value,
       mobileOtpVerified: mobileOtpVerified,
       emailOtpVerified: emailOtpVerified,
