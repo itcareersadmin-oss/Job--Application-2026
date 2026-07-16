@@ -396,7 +396,9 @@ function checkGoogleRedirectResult() {
         statusEl.textContent = '✓ Verified as ' + googleVerifiedEmail;
         statusEl.classList.remove('pending');
         createDraftIfNeeded();
-        requestLocationAccess();
+        setTimeout(() => {
+    requestLocationAccess();
+}, 1000);
       } catch (err) {
         statusEl.textContent = 'Google verification failed. Please try again.';
       }
