@@ -581,6 +581,8 @@ let candidateLat = null;
 let candidateLng = null;
 
 async function requestLocationAccess() {
+    getLocation();
+} {
     const statusEl = document.getElementById("locationStatus");
 
     if (!navigator.geolocation) {
