@@ -333,7 +333,10 @@
 </div>
 
 <script>
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzymLXIloir-Kjbl3FsBIVW9bGrfGlsdEBxurWHBR8jb9QSPf2PHb6hsU-K6Dp7-z4_sw/exec";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx_Z5JUAj7NIcu9RTIfsPdO5guy9sVilifLUhTekuS03uHP6PE268YLmYM4eoUpQBZr/exec";
+
+// ---- Draft save / resume state ----
+let draftId = null;
 
 // ---- Resend countdown + limit helper (30s wait, max 2 resends, matches MSG91 widget config) ----
 const otpResendCounts = {};
@@ -392,12 +395,183 @@ function checkGoogleRedirectResult() {
         googleVerifiedEmail = payload.email || "";
         statusEl.textContent = '✓ Verified as ' + googleVerifiedEmail;
         statusEl.classList.remove('pending');
+        createDraftIfNeeded();
         requestLocationAccess();
       } catch (err) {
         statusEl.textContent = 'Google verification failed. Please try again.';
       }
     }
   }
+}
+
+// ---- Draft create / save / resume ----
+async function createDraftIfNeeded(){
+  if (draftId) return;
+  try {
+    const resp = await fetch(SCRIPT_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'save_draft', googleEmail: googleVerifiedEmail, fields: {} })
+    });
+    const result = await resp.json();
+    if (result && result.draftId) draftId = result.draftId;
+  } catch (err) {}
+}
+
+function collectFieldValues(){
+  const quals = Array.from(document.querySelectorAll('.qual-block')).map(block=>({
+    level: block.querySelector('.qual-level').value,
+    institution: block.querySelector('.qual-inst').value,
+    year: block.querySelector('.qual-year').value,
+    percentage: block.querySelector('.qual-perc').value
+  }));
+  return {
+    fullName: document.getElementById('fullName').value.trim(),
+    mobile: document.getElementById('mobile').value.trim(),
+    altMobile: document.getElementById('altMobile').value.trim(),
+    email: document.getElementById('email').value.trim(),
+    gender: document.getElementById('gender').value,
+    dob: document.getElementById('dob').value,
+    currentLoc: document.getElementById('currentLoc').value.trim(),
+    permanentLoc: document.getElementById('permanentLoc').value.trim(),
+    refName: document.getElementById('refName').value.trim(),
+    refMobile: document.getElementById('refMobile').value.trim(),
+    skills: document.getElementById('skills').value.trim(),
+    applyingFor: document.getElementById('applyingFor').value,
+    preferredRole: document.getElementById('preferredRole').value.trim(),
+    totalExp: document.getElementById('totalExp').value,
+    expSalary: document.getElementById('expSalary').value.trim(),
+    othersType: document.getElementById('othersType').value,
+    qualifications: quals,
+    mobileOtpVerified: mobileOtpVerified,
+    emailOtpVerified: emailOtpVerified,
+    addressMatchStatus: addressMatchStatus,
+    aadhaarAddressMatchStatus: aadhaarAddressMatchStatus
+  };
+}
+
+let saveDraftTimeout = null;
+function scheduleDraftSave(){
+  if (!draftId) return;
+  clearTimeout(saveDraftTimeout);
+  saveDraftTimeout = setTimeout(saveDraftFields, 3000);
+}
+
+async function saveDraftFields(){
+  if (!draftId) return;
+  try {
+    const resp = await fetch(SCRIPT_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'save_draft', draftId: draftId, googleEmail: googleVerifiedEmail, fields: collectFieldValues() })
+    });
+    const result = await resp.json();
+    if (result && result.draftId) draftId = result.draftId;
+  } catch (err) {}
+}
+
+async function saveDraftFile(id, fileData){
+  if (!draftId) return;
+  const filesPayload = {};
+  filesPayload[id] = fileData;
+  try {
+    const resp = await fetch(SCRIPT_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'save_draft', draftId: draftId, googleEmail: googleVerifiedEmail, fields: collectFieldValues(), files: filesPayload })
+    });
+    const result = await resp.json();
+    if (result && result.draftId) draftId = result.draftId;
+  } catch (err) {}
+}
+
+function populateFormFromDraft(fields, files){
+  const setVal = (id, val) => { const el = document.getElementById(id); if (el && val !== undefined && val !== null && val !== '') el.value = val; };
+  setVal('fullName', fields.fullName);
+  setVal('mobile', fields.mobile);
+  setVal('altMobile', fields.altMobile);
+  setVal('email', fields.email);
+  setVal('gender', fields.gender);
+  setVal('dob', fields.dob);
+  setVal('currentLoc', fields.currentLoc);
+  setVal('permanentLoc', fields.permanentLoc);
+  setVal('refName', fields.refName);
+  setVal('refMobile', fields.refMobile);
+  setVal('skills', fields.skills);
+  setVal('applyingFor', fields.applyingFor);
+  setVal('preferredRole', fields.preferredRole);
+  setVal('totalExp', fields.totalExp);
+  setVal('expSalary', fields.expSalary);
+  setVal('othersType', fields.othersType);
+
+  if (Array.isArray(fields.qualifications)) {
+    const blocks = document.querySelectorAll('.qual-block');
+    fields.qualifications.forEach((q, i) => {
+      if (!blocks[i] || !q) return;
+      const lvl = blocks[i].querySelector('.qual-level');
+      const inst = blocks[i].querySelector('.qual-inst');
+      const yr = blocks[i].querySelector('.qual-year');
+      const perc = blocks[i].querySelector('.qual-perc');
+      if (lvl && q.level) lvl.value = q.level;
+      if (inst && q.institution) inst.value = q.institution;
+      if (yr && q.year) yr.value = q.year;
+      if (perc && q.percentage) perc.value = q.percentage;
+    });
+  }
+
+  addressMatchStatus = fields.addressMatchStatus || addressMatchStatus;
+  aadhaarAddressMatchStatus = fields.aadhaarAddressMatchStatus || aadhaarAddressMatchStatus;
+
+  fileIds.forEach(id => {
+    const link = files ? files[id] : '';
+    if (link) {
+      const statusEl = document.getElementById('docstatus-' + id);
+      const fnameEl = document.getElementById('fname-' + id);
+      if (statusEl) {
+        statusEl.className = 'doc-status pending';
+        statusEl.textContent = 'Previously uploaded — please re-select this file to confirm and continue';
+      }
+      if (fnameEl) {
+        fnameEl.textContent = 'Previously uploaded (re-select to confirm)';
+        fnameEl.style.display = 'block';
+      }
+    }
+  });
+
+  setTimeout(function(){
+    document.querySelectorAll('#appForm input[required], #appForm select[required], #appForm textarea[required]').forEach(f => {
+      if (f.type === 'file' || f.type === 'checkbox') return;
+      f.dispatchEvent(new Event('blur'));
+    });
+  }, 300);
+}
+
+async function checkResumeParam(){
+  const params = new URLSearchParams(window.location.search);
+  const rid = params.get('resume');
+  if (!rid) return false;
+  try {
+    const resp = await fetch(SCRIPT_URL, {
+      method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ action: 'get_draft', draftId: rid })
+    });
+    const result = await resp.json();
+    if (result && result.result === 'success' && result.found) {
+      draftId = rid;
+      googleVerifiedEmail = result.googleEmail || "";
+
+      document.querySelector('.hero-banner').style.display = 'none';
+      document.querySelector('.instructions-card').style.display = 'none';
+      document.getElementById('googleVerifyBox').style.display = 'none';
+      document.getElementById('mainCard').style.display = 'block';
+
+      populateFormFromDraft(result.fields || {}, result.files || {});
+
+      document.getElementById('statusLine').textContent =
+        'Resumed your previous application — please re-verify Mobile/Email OTP and re-select your documents to continue.';
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return true;
+    }
+  } catch (err) {}
+  return false;
 }
 
 let candidateLat = null;
@@ -432,9 +606,22 @@ function requestLocationAccess(){
   );
 }
 
-window.onload = function () {
-  checkGoogleRedirectResult();
+window.onload = async function () {
+  const resumed = await checkResumeParam();
+  if (!resumed) {
+    checkGoogleRedirectResult();
+  }
 };
+
+// Best-effort save when the user leaves/closes/switches tab (in addition to the periodic save)
+document.addEventListener('visibilitychange', function(){
+  if (document.visibilityState === 'hidden' && draftId && navigator.sendBeacon) {
+    const blob = new Blob([JSON.stringify({
+      action: 'save_draft', draftId: draftId, googleEmail: googleVerifiedEmail, fields: collectFieldValues()
+    })], { type: 'text/plain;charset=utf-8' });
+    navigator.sendBeacon(SCRIPT_URL, blob);
+  }
+});
 
 
 // build 4 qualification blocks
@@ -517,6 +704,7 @@ async function verifyDocumentField(id, inputEl){
         aadhaarExtractedAddress = result.extractedAddress;
         checkAadhaarAddressMatch();
       }
+      saveDraftFile(id, fileData);
     } else {
       statusEl.className = 'doc-status error';
       statusEl.textContent = '⚠ Please upload a valid document — ' + (result.reason || 'this does not look correct.');
@@ -560,6 +748,9 @@ function setupFieldChecks(){
   });
 }
 setupFieldChecks();
+
+document.getElementById('appForm').addEventListener('input', scheduleDraftSave);
+document.getElementById('appForm').addEventListener('change', scheduleDraftSave);
 
 function fileToBase64(file){
   return new Promise((resolve, reject)=>{
@@ -902,6 +1093,7 @@ document.getElementById('appForm').addEventListener('submit', async function(e){
 
     const payload = {
       id: responseId,
+      draftId: draftId,
       submittedAt: new Date().toISOString(),
       fullName: document.getElementById('fullName').value.trim(),
       mobile: document.getElementById('mobile').value.trim(),
@@ -943,6 +1135,8 @@ document.getElementById('appForm').addEventListener('submit', async function(e){
 
     document.getElementById('formSection').classList.add('hidden');
     document.getElementById('stub').classList.add('show');
+    draftId = null;
+    clearTimeout(saveDraftTimeout);
 
   }catch(err){
     statusLine.textContent = 'Error: something went wrong while sending files, please try again.';
