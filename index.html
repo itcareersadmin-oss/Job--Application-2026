@@ -582,41 +582,6 @@ let candidateLng = null;
 
 async function requestLocationAccess() {
     getLocation();
-} {
-    const statusEl = document.getElementById("locationStatus");
-
-    if (!navigator.geolocation) {
-        statusEl.textContent = "Geolocation is not supported on this device.";
-        return;
-    }
-
-    statusEl.textContent = "Requesting location permission...";
-
-    if (navigator.permissions) {
-        try {
-            const permission = await navigator.permissions.query({ name: "geolocation" });
-
-            if (permission.state === "granted") {
-                getLocation();
-                return;
-            }
-
-            if (permission.state === "prompt") {
-                getLocation();
-                return;
-            }
-
-            if (permission.state === "denied") {
-                statusEl.innerHTML =
-                    'Location permission is blocked. Please enable it from Browser Site Settings and <a href="javascript:void(0)" onclick="requestLocationAccess()">Try Again</a>.';
-                return;
-            }
-        } catch (e) {
-            getLocation();
-        }
-    } else {
-        getLocation();
-    }
 }
 
 function getLocation() {
